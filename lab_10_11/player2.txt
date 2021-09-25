@@ -1,0 +1,9 @@
+Game 1: 5 
+Game 2: 5 
+Game 3: 6 
+Game 4: 5 
+Game 5: 6 
+Result: 
+Player 1 result = 14
+Player 2 result = 27
+Winner: Player 2

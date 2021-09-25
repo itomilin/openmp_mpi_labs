@@ -104,7 +104,7 @@ int main( int argc, char** argv )
                             buf,
                             strlen(buf),
                             MPI_CHAR,
-                            &status);
+                            &status );
         }
 
         MPI_Send( games,
@@ -125,11 +125,11 @@ int main( int argc, char** argv )
     // ** VERY IMPORTANT
     // Аллоцируем буфер под другие процессы.
     if (thread != master )
-        temp = (char *) malloc((length+1) * sizeof(char));
+        temp = (char *) malloc( (length + 1) * sizeof(char) );
     // ** VERY IMPORTANT
 
     MPI_Bcast( temp, length + 1, MPI_BYTE, master, MPI_COMM_WORLD );
-    MPI_Barrier( MPI_COMM_WORLD);
+    MPI_Barrier( MPI_COMM_WORLD );
 
     // Добавляем результат игры, полученный после рассылке через broadcast.
     if ( thread != master )
@@ -149,7 +149,7 @@ int main( int argc, char** argv )
                         buf,
                         strlen(buf),
                         MPI_CHAR,
-                        &status);
+                        &status );
 
         MPI_File_close( &fh );
     }
