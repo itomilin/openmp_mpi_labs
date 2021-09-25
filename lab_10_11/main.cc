@@ -1,6 +1,8 @@
 #include <iostream>
 #include <algorithm>
 #include <random>
+#include <sstream>
+#include <cstring>
 
 #include <mpi.h>
 
@@ -14,67 +16,150 @@ uint16_t roll_dice()
     return dist( generate );
 }
 
-
-
 int main( int argc, char** argv )
 {
-//    std::cout << roll_dice() << std::endl;
-    int num_task {};
+    // Количество партий.
+    constexpr int num_games = 5;
+
+    int thread   {};
     int size     {};
-    int master   {2};
-    int buffer   {};
+    int master   {0};
+
+    int games[num_games] {};
+
+    int length {};
+    char* temp {};
 
     // -------------------------------------------------------------------------
 
     MPI_Init( &argc, &argv );
     MPI_Status status;
+    MPI_File fh;
 
     // -------------------------------------------------------------------------
 
-    MPI_Comm_rank( MPI_COMM_WORLD, &num_task );
-    MPI_Comm_size( MPI_COMM_WORLD, &size     );
+    // Контекст обмена группы.
+    MPI_Comm_rank( MPI_COMM_WORLD, &thread );
+    MPI_Comm_size( MPI_COMM_WORLD, &size   );
 
-    if ( num_task == master )
+    // -------------------------------------------------------------------------
+
+    if ( thread == master ) // Посредник.
     {
-        for ( std::size_t i = 0; i < master; ++i )
+        // Массив для хранения результатов для каждого игрока.
+        int results[2] {};
+
+        // Суммируем очки за все партии для каждого игрока.
+        for ( int i = 1; i <= 2; ++i )
         {
-            MPI_Recv( &buffer,
-                      1,
+            MPI_Recv( games,
+                      num_games,
                       MPI_INT,
                       i,
                       MPI_ANY_TAG,
                       MPI_COMM_WORLD,
                       &status );
-            std::cout << "From: " << i
-                      << "\nValue: " << buffer << std::endl;
-
+            results[i - 1] = std::accumulate( games,
+                                              games + num_games,
+                                              results[i - 1] );
         }
+
+        // Определяем победителя.
+        const char* winner {};
+        if ( results[0] == results[1] )
+            winner = "draw";
+        else if ( results[0] < results[1] )
+            winner = "Player 2";
+        else if ( results[0] > results[1] )
+            winner = "Player 1";
+
+        // Формируем строку с суммой очков и победителем.
+        std::stringstream ss;
+        ss << "Player 1 result = " << results[0] << "\n" <<
+              "Player 2 result = " << results[1] << "\n" <<
+              "Winner: " << winner;
+        const std::string tmp = ss.str();
+        length = ss.str().length();
+        temp = (char *) malloc( (length + 1) * sizeof(char) );
+        std::snprintf( temp, length + 1, "%s", tmp.c_str() );
+//        std::strcpy(temp, tmp.c_str());
     }
     else
     {
-        // Играем 5 партий.
-        for ( std::size_t i = 0; i < 5; ++i )
-        {
-            buffer = roll_dice();
-            MPI_Send( &buffer,
-                      1,
-                      MPI_INT,
-                      master,
-                      num_task,
-                      MPI_COMM_WORLD );
+        const char* f_name = thread == 1 ? "player1.txt" : "player2.txt";
 
-            std::cout << "Send from slave: " << num_task
-                      << " NUM: "  <<  buffer
-                      << " PART: "  << i << std::endl;
+        MPI_File_open( MPI_COMM_SELF,
+                       f_name,
+                       MPI_MODE_CREATE | MPI_MODE_WRONLY,
+                       MPI_INFO_NULL,
+                       &fh );
+
+        // Бросание куба 5 раз.
+        for ( uint16_t i = 0; i < num_games; ++i )
+        {
+            char buf[50];
+            games[i] = roll_dice();
+            snprintf( buf, 50, "Game %i: %i \n", i + 1, games[i] );
+            MPI_File_write( fh,
+                            buf,
+                            strlen(buf),
+                            MPI_CHAR,
+                            &status);
         }
+
+        MPI_Send( games,
+                  num_games,
+                  MPI_INT,
+                  master,
+                  thread,
+                  MPI_COMM_WORLD );
+
+        MPI_File_close( &fh );
     }
 
+    // -------------------------------------------------------------------------
+
+    // Коллективная функция, должна быть вызвана всеми процессами.
+    MPI_Bcast( &length, 1, MPI_INT, master, MPI_COMM_WORLD );
+
+    // ** VERY IMPORTANT
+    // Аллоцируем буфер под другие процессы.
+    if (thread != master )
+        temp = (char *) malloc((length+1) * sizeof(char));
+    // ** VERY IMPORTANT
+
+    MPI_Bcast( temp, length + 1, MPI_BYTE, master, MPI_COMM_WORLD );
+    MPI_Barrier( MPI_COMM_WORLD);
+
+    // Добавляем результат игры, полученный после рассылке через broadcast.
+    if ( thread != master )
+    {
+        const char* f_name = thread == 1 ? "player1.txt" : "player2.txt";
+
+        MPI_File_open( MPI_COMM_SELF,
+                       f_name,
+                       MPI_MODE_APPEND | MPI_MODE_WRONLY,
+                       MPI_INFO_NULL,
+                       &fh );
+
+        char buf[length + 50];
+        snprintf( buf, length + 50, "Result: \n%s\n", temp );
+
+        MPI_File_write( fh,
+                        buf,
+                        strlen(buf),
+                        MPI_CHAR,
+                        &status);
+
+        MPI_File_close( &fh );
+    }
+
+    // -------------------------------------------------------------------------
 
     MPI_Finalize();
 
     // -------------------------------------------------------------------------
 
-    std::cout << "END" << std::endl;
     return EXIT_SUCCESS;
 }
 
