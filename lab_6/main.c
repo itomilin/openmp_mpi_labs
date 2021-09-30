@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include </usr/lib/gcc/x86_64-linux-gnu/8/include/omp.h>
+#include <omp.h>
 
 int main( int argc, char** argv )
 {

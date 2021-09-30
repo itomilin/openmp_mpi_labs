@@ -1,6 +1,6 @@
 #include <iostream>
 
-#include </usr/lib/gcc/x86_64-linux-gnu/8/include/omp.h>
+#include <omp.h>
 
 #define N 6
 
