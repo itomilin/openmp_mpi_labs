@@ -3,38 +3,39 @@
 #include <random>
 #include <sstream>
 #include <cstring>
+#include <cmath>
 
 #include <mpi.h>
 
-// Имитация броска кубика.
-uint16_t roll_dice()
-{
-    std::random_device rd;
-    std::mt19937 generate( rd() );
-    std::uniform_int_distribution<> dist( 1, 6 );
-
-    return dist( generate );
-}
-
 int main( int argc, char** argv )
 {
-    // Количество партий.
-    constexpr int num_games = 5;
+    int thread {};
+    int size   {};
+    int master {0};
 
-    int thread   {};
-    int size     {};
-    int master   {0};
+    // Начальное выравнивание для векторов.
+    std::vector<int> xi  = { 1 };
+    std::vector<int> xir = { 1 };
+    auto constexpr A = 5;
+    auto constexpr x = 2;
+    double res {};
+    auto constexpr MAX {5};
 
-    int games[num_games] {};
+//    for ( std::size_t i = 1; i <= 5; ++i )
+//    {
+//        xir.emplace_back( std::pow( x, (i - 1) * i ) );
+//        xi.emplace_back( std::pow( x, i ) );
+//    }
 
-    int length {};
-    char* temp {};
-
+//    for ( std::size_t i = 0; i < xi.size(); ++i )
+//    {
+//        res += A * xi[i] * xir[i];
+//    }
+//    std::cout << res << std::endl;
     // -------------------------------------------------------------------------
 
     MPI_Init( &argc, &argv );
     MPI_Status status;
-    MPI_File fh;
 
     // -------------------------------------------------------------------------
 
@@ -44,114 +45,57 @@ int main( int argc, char** argv )
 
     // -------------------------------------------------------------------------
 
-    if ( thread == master ) // Посредник.
+    if ( thread == master )
     {
-        // Массив для хранения результатов для каждого игрока.
-        int results[2] {};
+        xi.resize( MAX );
+        MPI_Recv( &xi[0],
+                  MAX,
+                  MPI_INT,
+                  MPI_ANY_SOURCE,
+                  MPI_ANY_TAG,
+                  MPI_COMM_WORLD,
+                  &status );
 
-        // Суммируем очки за все партии для каждого игрока.
-        for ( int i = 1; i <= 2; ++i )
+        xir.resize( MAX );
+        MPI_Recv( &xir[0],
+                  MAX,
+                  MPI_INT,
+                  1,
+                  MPI_ANY_TAG,
+                  MPI_COMM_WORLD,
+                  &status );
+
+        // Умножаем параллельно полученные вектора.
+#pragma omp parallel for
+        for ( std::size_t i = 0; i < xi.size(); ++i )
         {
-            MPI_Recv( games,
-                      num_games,
-                      MPI_INT,
-                      i,
-                      MPI_ANY_TAG,
-                      MPI_COMM_WORLD,
-                      &status );
-            results[i - 1] = std::accumulate( games,
-                                              games + num_games,
-                                              results[i - 1] );
+            res += A * xi[i] * xir[i];
         }
 
-        // Определяем победителя.
-        const char* winner {};
-        if ( results[0] == results[1] )
-            winner = "draw";
-        else if ( results[0] < results[1] )
-            winner = "Player 2";
-        else if ( results[0] > results[1] )
-            winner = "Player 1";
-
-        // Формируем строку с суммой очков и победителем.
-        std::stringstream ss;
-        ss << "Player 1 result = " << results[0] << "\n" <<
-              "Player 2 result = " << results[1] << "\n" <<
-              "Winner: " << winner;
-        const std::string tmp = ss.str();
-        length = ss.str().length();
-        temp = (char *) malloc( (length + 1) * sizeof(char) );
-        std::snprintf( temp, length + 1, "%s", tmp.c_str() );
-//        std::strcpy(temp, tmp.c_str());
+        std::cout << res << std::endl;
     }
-    else
+    else if ( thread == 1 )
     {
-        const char* f_name = thread == 1 ? "player1.txt" : "player2.txt";
-
-        MPI_File_open( MPI_COMM_SELF,
-                       f_name,
-                       MPI_MODE_CREATE | MPI_MODE_WRONLY,
-                       MPI_INFO_NULL,
-                       &fh );
-
-        // Бросание куба 5 раз.
-        for ( uint16_t i = 0; i < num_games; ++i )
+        // Начинаем вычисление x^i и x^ir.
+        for ( std::size_t i = 1; i < MAX; ++i )
         {
-            char buf[50];
-            games[i] = roll_dice();
-            snprintf( buf, 50, "Game %i: %i \n", i + 1, games[i] );
-            MPI_File_write( fh,
-                            buf,
-                            strlen(buf),
-                            MPI_CHAR,
-                            &status );
+            xir.emplace_back( std::pow( x, (i - 1) * i ) );
+            xi.emplace_back( std::pow( x, i ) );
         }
 
-        MPI_Send( games,
-                  num_games,
+        MPI_Send( &xi[0],
+                  MAX,
                   MPI_INT,
                   master,
                   thread,
                   MPI_COMM_WORLD );
 
-        MPI_File_close( &fh );
-    }
-
-    // -------------------------------------------------------------------------
-
-    // Коллективная функция, должна быть вызвана всеми процессами.
-    MPI_Bcast( &length, 1, MPI_INT, master, MPI_COMM_WORLD );
-
-    // ** VERY IMPORTANT
-    // Аллоцируем буфер под другие процессы.
-    if (thread != master )
-        temp = (char *) malloc( (length + 1) * sizeof(char) );
-    // ** VERY IMPORTANT
-
-    MPI_Bcast( temp, length + 1, MPI_BYTE, master, MPI_COMM_WORLD );
-    MPI_Barrier( MPI_COMM_WORLD );
-
-    // Добавляем результат игры, полученный после рассылке через broadcast.
-    if ( thread != master )
-    {
-        const char* f_name = thread == 1 ? "player1.txt" : "player2.txt";
-
-        MPI_File_open( MPI_COMM_SELF,
-                       f_name,
-                       MPI_MODE_APPEND | MPI_MODE_WRONLY,
-                       MPI_INFO_NULL,
-                       &fh );
-
-        char buf[length + 50];
-        snprintf( buf, length + 50, "Result: \n%s\n", temp );
-
-        MPI_File_write( fh,
-                        buf,
-                        strlen(buf),
-                        MPI_CHAR,
-                        &status );
-
-        MPI_File_close( &fh );
+        MPI_Send( &xir[0],
+                  MAX,
+                  MPI_INT,
+                  master,
+                  thread,
+                  MPI_COMM_WORLD );
     }
 
     // -------------------------------------------------------------------------
