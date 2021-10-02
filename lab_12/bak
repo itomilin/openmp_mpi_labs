@@ -1,0 +1,11 @@
+24 //    for ( std::size_t i = 1; i <= 5; ++i )                                     
+ 25 //    {                                                                          
+  26 //        xir.emplace_back( std::pow( x, (i - 1) * i ) );                        
+   27 //        xi.emplace_back( std::pow( x, i ) );                                   
+    28 //    }                                                                          
+     29                                                                                  
+      30 //    for ( std::size_t i = 0; i < xi.size(); ++i )                              
+       31 //    {                                                                          
+        32 //        res += A * xi[i] * xir[i];                                             
+         33 //    }                                                                          
+          34 //    std::cout << res << std::endl;  ]]}}

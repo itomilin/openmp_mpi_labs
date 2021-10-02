@@ -1,8 +1,5 @@
 #include <iostream>
-#include <algorithm>
-#include <random>
-#include <sstream>
-#include <cstring>
+#include <vector>
 #include <cmath>
 
 #include <mpi.h>
@@ -14,24 +11,18 @@ int main( int argc, char** argv )
     int master {0};
 
     // Начальное выравнивание для векторов.
-    std::vector<int> xi  = { 1 };
-    std::vector<int> xir = { 1 };
-    auto constexpr A = 5;
-    auto constexpr x = 2;
-    double res {};
+    std::vector<double> xi  { 1 };
+    std::vector<double> xir { 1 };
+
+    // a value.
+    auto constexpr A {5};
+    // x value.
+    auto constexpr x {2};
+    // s value.
     auto constexpr MAX {5};
 
-//    for ( std::size_t i = 1; i <= 5; ++i )
-//    {
-//        xir.emplace_back( std::pow( x, (i - 1) * i ) );
-//        xi.emplace_back( std::pow( x, i ) );
-//    }
+    double res {};
 
-//    for ( std::size_t i = 0; i < xi.size(); ++i )
-//    {
-//        res += A * xi[i] * xir[i];
-//    }
-//    std::cout << res << std::endl;
     // -------------------------------------------------------------------------
 
     MPI_Init( &argc, &argv );
@@ -50,7 +41,7 @@ int main( int argc, char** argv )
         xi.resize( MAX );
         MPI_Recv( &xi[0],
                   MAX,
-                  MPI_INT,
+                  MPI_DOUBLE,
                   MPI_ANY_SOURCE,
                   MPI_ANY_TAG,
                   MPI_COMM_WORLD,
@@ -59,7 +50,7 @@ int main( int argc, char** argv )
         xir.resize( MAX );
         MPI_Recv( &xir[0],
                   MAX,
-                  MPI_INT,
+                  MPI_DOUBLE,
                   1,
                   MPI_ANY_TAG,
                   MPI_COMM_WORLD,
@@ -76,7 +67,7 @@ int main( int argc, char** argv )
     }
     else if ( thread == 1 )
     {
-        // Начинаем вычисление x^i и x^ir.
+        // Начинаем вычисление x^i и x^(i-1)r.
         for ( std::size_t i = 1; i < MAX; ++i )
         {
             xir.emplace_back( std::pow( x, (i - 1) * i ) );
@@ -85,14 +76,14 @@ int main( int argc, char** argv )
 
         MPI_Send( &xi[0],
                   MAX,
-                  MPI_INT,
+                  MPI_DOUBLE,
                   master,
                   thread,
                   MPI_COMM_WORLD );
 
         MPI_Send( &xir[0],
                   MAX,
-                  MPI_INT,
+                  MPI_DOUBLE,
                   master,
                   thread,
                   MPI_COMM_WORLD );
